@@ -1,0 +1,342 @@
+from itertools import product
+import math
+# Using Sage's matrix object
+# Using Sage's matrix object
+# get_ones_vector is tested and works 
+# 
+
+def sub(mat, m):
+    
+    dependent = mat.pivots()
+    free = mat.nonpivots()
+    mul_list = []
+    
+    for y in free:
+        
+        d_list = []
+        
+        for x in range(0, len(dependent)):
+            
+                mat = copy(mat)
+                d_list.append(mat[x,y].denominator())
+                mat[x,y]*=-1
+                
+        mul = lcm(m,max(d_list))
+        mul_list.append(mul) 
+    
+    sub_mat = matrix(QQ,len(dependent),len(free)+1)
+    
+    for x in range(0, len(dependent)):
+       
+        sum = 0
+        t = 0 
+        
+        for y in free:
+        
+            sub_mat[x,t] = mat[x,y]*mul_list[t]
+            sum+=mat[x,y]*(y+1)
+            t+=1  
+           
+        sub_mat[x,t] = sum
+    
+    #    if sum.denominator() != 1 and math.gcd(m,sum.denominator()) !=1:
+       #     return []
+    
+    num_of_free_vars =  len(free)
+    
+    integer_free_vars = list(product(range(0, m + 1), repeat = num_of_free_vars))
+    
+    for x in integer_free_vars:
+        
+        flag = True
+       
+        for y in range(0,sub_mat.nrows()):
+            
+            sum = 0
+            
+            for z in range(0,sub_mat.ncols()-1):
+                
+                sum += sub_mat[y,z]*x[z]
+                
+            sum += sub_mat[y,sub_mat.ncols()-1]
+            if (sum.denominator() != 1 and math.gcd(m,sum.denominator()) !=1) or sum % m != dependent[y]+1:
+                flag = False
+                break
+        
+        if flag == True:
+            return sub_back(sub_mat,m,x,mul_list,free)
+        
+    return []
+        
+        
+def sub_back(mat,m, sub_tup, mul_list, free):
+    
+    point = []
+    
+    for x in range(0, mat.nrows()):
+        
+        sum = 0
+        
+        for y in range(0, mat.ncols()-1):
+            
+            sum +=mat[x,y]* sub_tup[y]
+            
+        sum+= mat[x, mat.ncols()-1]
+        point.append(sum)
+        
+    for x in range(0,len(free)):
+        
+        point.append(m*sub_tup[x]+free[x]+1)
+         
+    return point
+    
+     
+def Control(mat,m):
+    
+    result = []
+    flag = False
+    
+    for x in range(0,mat.nrows()):
+        
+        for y in range(0,mat.ncols()):
+            if mat[x,y].denominator() != 1:
+                flag = True
+                break
+        if flag:
+            break
+            
+    if flag:
+        result = sub(mat, m)
+
+    return result
+def positive_poset_check(pset, mult):
+    '''
+    Purpose: Given a Kunz poset, to brute force check if the H-description of the face associated to that poset
+        has any integer points (and thus numerical semigroups on it).
+    Input:
+        pset: The poset being checked
+        m: The multiplicity of P
+        max_kunz_coord: Largest integer value the fuction will check
+    Output:
+        returns False if negative
+        returns True and prints result if positive
+    '''
+    H = matrix(pset.hyperplane_desc)
+    reduced_H =  H.rref() # Reduced row echelon form (.rref might give rational values, should check this...)
+   # copy_H = copy(reduced_H) # .rref makes the matrix immutable so we have to scale the rows of a copy
+   # print(reduced_H)        
+    result = []
+    result = sub(reduced_H,mult)
+    
+    if result == []:
+        return False
+    
+    print(result)
+    
+    return True
+    
+    
+def get_ones_vector(h_matrix, mult):
+    '''
+    Purpose: To account for the +1's in the Kunz polyhedron inequalites
+        given the H-description of a face correspoding to a Kunz poset.
+    Input:
+        h_matrix: The hyperplane description of a face associated to a Kunz poset.
+        mult: The multiplicity of the Kunz poset whose H-description was passed to this function. 
+    Output:
+        A integer valued vector that counts the +1's needed to turn the matrix given by hyperplane_desc
+        into a desctiption of the Kunz polyhedron of multiplicity 'mult'.
+    '''
+    ones_vector = []
+    
+    for row in h_matrix:
+        index_sum = 0
+        ones = 0
+        for i in range(h_matrix.ncols()): # .ncols() gets number of columns
+            if row[i] > 0:
+                index_sum += ((i+1) * row[i]) # Counts the copies of variables
+        ones = -(index_sum // mult) # Given how .hyperplane_desc rearranges the equations, the ones need to be negative
+        ones_vector.append(ones)
+    return matrix(ones_vector)
+
+
+    
+def find_NS(m,sol,free,nonfree,mult,k): #k=maxKunz to test
+    
+    l=list(product(range(1,k+1),repeat=len(free)))
+    #print(l)
+    nonFreeSol=[]
+    allNoneFreeSol=[]
+    finalSol=[]
+    combination=[]#empty combination waiting to be assigned
+    for i in range(0,m):
+        rowSum=0
+        for comb in l:
+            for f in range(0,len(free)):
+                rowSum=sol[i][free[f]]*(free[f]+1+mult*(comb[f]))
+                nonFreeSol.append(rowSum)
+            if not satisfiesApery(nonfree,free,mult,comb,sol):
+                nonFreeSol=[]
+            if nonFreeSol!=[]:
+                combination=comb
+                break
+        break
+    if combination==[]:
+        return -1
+    
+    ultimateSol=[-1 for i in range(mult-1)]
+    solHelper=[0 for i in range(mult-1)]
+    for i in range(0,len(free)):
+        ultimateSol[free[i]]=mult*comb[i]+free[i]+1
+        solHelper[free[i]]=mult*comb[i]+free[i]+1
+
+    u=vector(solHelper)
+    for i in range(0,len(sol)):
+        v=vector(sol[i])
+        if i<len(nonfree):
+            ultimateSol[nonfree[i]]=u.dot_product(v)
+                  
+    #return ultimateSol
+    return True
+    
+'''returns true if all entries are less than m'''
+def satisfiesApery(nonfree,free,mult,comb,sol):
+    ultimateSol=[-1 for i in range(mult-1)]
+    solHelper=[0 for i in range(mult-1)]
+    for i in range(0,len(free)):
+        ultimateSol[free[i]]=mult*comb[i]+free[i]+1
+        solHelper[free[i]]=mult*comb[i]+free[i]+1
+    u=vector(solHelper)
+    for i in range(0,len(sol)):
+        v=vector(sol[i])
+        if i<len(nonfree):
+            ultimateSol[nonfree[i]]=u.dot_product(v)
+    
+    for u in ultimateSol:
+        if u<=mult:
+            return False
+    return True
+    
+def find_NS_call(pset,mult,k):
+    
+    H = matrix(pset.hyperplane_desc)
+    ones_vector = get_ones_vector(H, mult)
+    aug_H = H.augment(ones_vector.transpose())
+    reduced_aug_H = H.rref()
+    rH0=reduced_aug_H
+    rH=matrix(convert_fractions(rH0,mult))
+    nonfree=reduced_aug_H.pivots()
+    free = reduced_aug_H.nonpivots()
+    numFree=len(free)
+    m=rH.nrows()
+    n=rH.ncols()
+    sol=[[0 for x in range(n)] for y in range(m)]
+    for i in range(0,m):
+         for j in range(0,n):
+                sol[i][j]=-1*rH[i][j]
+    for i in range(0,m):
+        for j in range(0,n):
+            if sol[i][j]==-1:
+                sol[i][j]=0
+                break
+    for i in sol:
+        for j in i:
+            if j not in ZZ:
+                return None
+            
+    #if Ps_0 in any m
+    basic=[]
+    if len(sol)==0: 
+        for m in range(mult+1,mult+mult):
+            basic.append(m)
+        #return basic
+        return True
+        
+        
+    finalSol=[]
+    for i in range(0,m):
+        rowSum=0
+        for f in free:
+            rowSum+=sol[i][f]*(f+1+mult) #bi=ai*i
+        finalSol.append(rowSum)
+    
+    for i in range(0,len(finalSol)):
+        if finalSol[i]==0:
+            break
+        if finalSol[i]%mult!=nonfree[i]+1: #if bi!= i mod m
+            #print("negative poset")
+            return False #if negative
+    
+    
+    #if doesn't satsify apery set condition,
+    #then there must be a NS satisfying the condition
+    s=find_NS(m,sol,free,nonfree,mult,k)
+    while(s==-1):
+        k=k+1
+        s=find_NS(m,sol,free,nonfree,mult,k)
+    #return s
+    return True
+
+def generalSol(pset,mult):
+    H = matrix(pset.hyperplane_desc)
+    ones_vector = get_ones_vector(H, mult)
+    aug_H = H.augment(ones_vector.transpose())
+    reduced_aug_H = H.rref()
+    rH=reduced_aug_H
+    print(rH)
+    print(" ")
+    return rH
+    m=rH.nrows()
+    n=rH.ncols()
+    sol=[[0 for x in range(n)] for y in range(m)]
+    for i in range(0,m):
+         for j in range(0,n):
+                sol[i][j]=-1*rH[i][j]
+    for i in range(0,m):
+        for j in range(0,n):
+            if sol[i][j]==-1:
+                sol[i][j]=0
+                break
+    s=matrix(sol)
+
+def convert_fractions(reduced,mult):
+    m=reduced.nrows()
+    n=reduced.ncols()
+    M=[[-1]*n for i in range(m)]
+    #M=reduced.am() #mutable matrix
+    for i in range(0,m):
+        for j in range(0,n):
+            den=reduced[i,j].denom()
+            if den!=1:
+                if gcd(den,mult)==1:
+                    d=den.inverse_mod(mult)
+                    M[i][j]=reduced[i,j].numerator()*d
+                    
+    for i in range(0,m):
+        for j in range(0,n):
+            if M[i][j]==-1:
+                M[i][j]=reduced[i,j]
+    return M 
+    
+
+'''
+myFindSemigroup:
+    outputs:
+        Given a poset, returns:
+        False if negative
+        None if cannot be determined
+        an array solution if positive
+    
+    inputs:
+        pset = poset
+        mult = mutiplicity
+'''
+def IsPositive(pset,mult):
+    s=find_NS_call(pset,mult,1)
+    if s==None:
+        return positive_poset_check(pset,mult)
+    return s
+    
+
+    
+    
